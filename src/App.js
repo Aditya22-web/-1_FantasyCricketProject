@@ -11,6 +11,7 @@ import {
   Alert,
   AlertIcon,
   Spinner,
+  Input,
 } from '@chakra-ui/react';
 import Autosuggest from 'react-autosuggest';
 
@@ -40,7 +41,13 @@ const renderSuggestion = suggestion => (
 
 function App() {
   const [players, setPlayers] = useState(Array(22).fill(''));
-  const [pitchReport, setPitchReport] = useState('');
+  const [pitchReport, setPitchReport] = useState({
+    spin_friendly: 0.5,
+    pace_friendly: 0.5,
+    batting_friendly: 0.5,
+    bounce: 0.5,
+    moisture: 0.5
+  });
   const [suggestions, setSuggestions] = useState(Array(22).fill([]));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -52,16 +59,33 @@ function App() {
     setPlayers(newPlayers);
   };
 
-  const onSuggestionsFetchRequested = ({ value }, index) => {
-    const newSuggestions = [...suggestions];
-    newSuggestions[index] = getSuggestions(value);
-    setSuggestions(newSuggestions);
+  const onSuggestionsFetchRequested = async ({ value }, index) => {
+    try {
+      const response = await fetch(`http://localhost:5002/autocomplete?q=${encodeURIComponent(value)}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch suggestions');
+      }
+      const data = await response.json();
+      const newSuggestions = [...suggestions];
+      newSuggestions[index] = data;
+      setSuggestions(newSuggestions);
+    } catch (err) {
+      console.error('Error fetching suggestions:', err);
+    }
   };
 
   const onSuggestionsClearRequested = (index) => {
     const newSuggestions = [...suggestions];
     newSuggestions[index] = [];
     setSuggestions(newSuggestions);
+  };
+
+  const handlePitchReportChange = (e) => {
+    const { name, value } = e.target;
+    setPitchReport(prev => ({
+      ...prev,
+      [name]: parseFloat(value) || 0
+    }));
   };
 
   const handleSubmit = async () => {
@@ -73,7 +97,7 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch('https://cricketer-selection-app-jrcwqm45.devinapps.com/analyze_pitch', {
+      const response = await fetch('http://localhost:5002/suggest_players', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,8 +148,8 @@ function App() {
                   suggestions={suggestions[index]}
                   onSuggestionsFetchRequested={({ value }) => onSuggestionsFetchRequested({ value }, index)}
                   onSuggestionsClearRequested={() => onSuggestionsClearRequested(index)}
-                  getSuggestionValue={getSuggestionValue}
-                  renderSuggestion={renderSuggestion}
+                  getSuggestionValue={(suggestion) => suggestion}
+                  renderSuggestion={(suggestion) => <div>{suggestion}</div>}
                   inputProps={inputProps(index)}
                 />
               </HStack>
@@ -135,13 +159,22 @@ function App() {
 
         <Box width="100%">
           <Heading as="h2" size="lg" mb={4}>Pitch Report</Heading>
-          <Textarea
-            value={pitchReport}
-            onChange={(e) => setPitchReport(e.target.value)}
-            placeholder="Enter pitch report description"
-            size="lg"
-            rows={6}
-          />
+          <VStack spacing={4}>
+            {Object.entries(pitchReport).map(([key, value]) => (
+              <HStack key={key} width="100%">
+                <Text width="150px">{key.replace('_', ' ').charAt(0).toUpperCase() + key.slice(1)}:</Text>
+                <Input
+                  type="number"
+                  name={key}
+                  value={value}
+                  onChange={handlePitchReportChange}
+                  min={0}
+                  max={1}
+                  step={0.1}
+                />
+              </HStack>
+            ))}
+          </VStack>
         </Box>
 
         <Button colorScheme="blue" size="lg" onClick={handleSubmit} isLoading={isLoading}>
